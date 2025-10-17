@@ -9,99 +9,99 @@ const OUTPUT_FILE = path.join(OUTPUT_DIR, "all-src-portrait-3col.pdf");
 
 // ✅ tune these:
 const EXTENSIONS = new Set([
-    ".js", ".jsx", ".ts", ".tsx",
-    ".json", ".md", ".css", ".scss",
-    ".html", ".yml", ".yaml"
+  ".js", ".jsx", ".ts", ".tsx",
+  ".json", ".md", ".css", ".scss",
+  ".html", ".yml", ".yaml"
 ]);
 const IGNORE_DIRS = new Set([
-    "node_modules", ".git", "build", "dist", ".next", "out", "coverage", ".turbo", ".cache"
+  "node_modules", ".git", "build", "dist", ".next", "out", "coverage", ".turbo", ".cache"
 ]);
 const MAX_FILE_BYTES = 200 * 1024; // skip files > 200KB
 
 if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
 function shouldIgnore(filePath) {
-    const parts = filePath.split(path.sep);
-    if (parts.some(p => IGNORE_DIRS.has(p))) return true;
+  const parts = filePath.split(path.sep);
+  if (parts.some(p => IGNORE_DIRS.has(p))) return true;
 
-    const ext = path.extname(filePath).toLowerCase();
-    if (!EXTENSIONS.has(ext)) return true;
+  const ext = path.extname(filePath).toLowerCase();
+  if (!EXTENSIONS.has(ext)) return true;
 
-    try {
-        const { size } = fs.statSync(filePath);
-        if (size > MAX_FILE_BYTES) return true;
-    } catch (_) { }
-    return false;
+  try {
+    const { size } = fs.statSync(filePath);
+    if (size > MAX_FILE_BYTES) return true;
+  } catch (_) { }
+  return false;
 }
 
 function getAllFiles(dir) {
-    let files = [];
-    for (const f of fs.readdirSync(dir)) {
-        const p = path.join(dir, f);
-        const stat = fs.statSync(p);
-        if (stat.isDirectory()) {
-            if (!IGNORE_DIRS.has(f)) files = files.concat(getAllFiles(p));
-        } else {
-            if (!shouldIgnore(p)) files.push(p);
-        }
+  let files = [];
+  for (const f of fs.readdirSync(dir)) {
+    const p = path.join(dir, f);
+    const stat = fs.statSync(p);
+    if (stat.isDirectory()) {
+      if (!IGNORE_DIRS.has(f)) files = files.concat(getAllFiles(p));
+    } else {
+      if (!shouldIgnore(p)) files.push(p);
     }
-    return files;
+  }
+  return files;
 }
 
 function guessLanguage(filePath) {
-    const ext = path.extname(filePath).toLowerCase();
-    switch (ext) {
-        case ".ts":
-        case ".tsx": return "typescript";
-        case ".js":
-        case ".jsx": return "javascript";
-        case ".json": return "json";
-        case ".css":
-        case ".scss": return "css";
-        case ".html": return "xml";
-        case ".md": return "markdown";
-        case ".yml":
-        case ".yaml": return "yaml";
-        default: return "plaintext";
-    }
+  const ext = path.extname(filePath).toLowerCase();
+  switch (ext) {
+    case ".ts":
+    case ".tsx": return "typescript";
+    case ".js":
+    case ".jsx": return "javascript";
+    case ".json": return "json";
+    case ".css":
+    case ".scss": return "css";
+    case ".html": return "xml";
+    case ".md": return "markdown";
+    case ".yml":
+    case ".yaml": return "yaml";
+    default: return "plaintext";
+  }
 }
 
 (async () => {
-    const browser = await puppeteer.launch({ args: ["--no-sandbox", "--font-render-hinting=none"] });
-    const page = await browser.newPage();
-    await page.emulateMediaType("screen");
+  const browser = await puppeteer.launch({ args: ["--no-sandbox", "--font-render-hinting=none"] });
+  const page = await browser.newPage();
+  await page.emulateMediaType("screen");
 
-    const files = getAllFiles(SOURCE_DIR);
-    console.log(`📄 Packing ${files.length} files into a single PORTRAIT 3-column PDF...\n`);
+  const files = getAllFiles(SOURCE_DIR);
+  console.log(`📄 Packing ${files.length} files into a single PORTRAIT 3-column PDF...\n`);
 
-    let sections = "";
-    for (const filePath of files) {
-        const rel = path.relative(SOURCE_DIR, filePath);
-        const content = fs.readFileSync(filePath, "utf8");
-        const language = guessLanguage(filePath);
-        let highlighted;
-        try {
-            highlighted = hljs.highlight(content, { language }).value;
-        } catch {
-            highlighted = hljs.highlightAuto(content).value;
-        }
+  let sections = "";
+  for (const filePath of files) {
+    const rel = path.relative(SOURCE_DIR, filePath);
+    const content = fs.readFileSync(filePath, "utf8");
+    const language = guessLanguage(filePath);
+    let highlighted;
+    try {
+      highlighted = hljs.highlight(content, { language }).value;
+    } catch {
+      highlighted = hljs.highlightAuto(content).value;
+    }
 
-        sections += `
+    sections += `
       <section class="file">
         <div class="file-title">${rel}</div>
         <pre><code class="hljs">${highlighted}</code></pre>
       </section>
     `;
-    }
+  }
 
-    const html = `
+  const html = `
   <!DOCTYPE html>
   <html>
   <head>
     <meta charset="utf-8"/>
     <style>
       /* A4 portrait */
-      @page { size: A4; margin: 0mm; }
+      @page { size: A4; margin: 8mm; }
 
       html, body { padding: 0; margin: 0; }
       body {
@@ -112,7 +112,7 @@ function guessLanguage(filePath) {
 
       /* Portrait: 3 columns still works; each ~60mm wide with 8mm gaps on A4 content area */
       .columns {
-        column-count: 1;            /* force 3 columns */
+        column-count: 2;            /* force 3 columns */
         column-gap: 8mm;            /* narrow gap to save space */
         column-fill: auto;          /* fill left-to-right, avoids balancing gaps */
       }
@@ -178,15 +178,15 @@ function guessLanguage(filePath) {
   </html>
   `;
 
-    await page.setContent(html, { waitUntil: "load" });
+  await page.setContent(html, { waitUntil: "load" });
 
-    await page.pdf({
-        path: OUTPUT_FILE,
-        printBackground: false,
-        preferCSSPageSize: true,
-        scale: 0.9   // slightly tighter zoom helps in portrait
-    });
+  await page.pdf({
+    path: OUTPUT_FILE,
+    printBackground: false,
+    preferCSSPageSize: true,
+    scale: 0.9   // slightly tighter zoom helps in portrait
+  });
 
-    await browser.close();
-    console.log(`\n🎉 Done! Wrote: ${OUTPUT_FILE}`);
+  await browser.close();
+  console.log(`\n🎉 Done! Wrote: ${OUTPUT_FILE}`);
 })();
